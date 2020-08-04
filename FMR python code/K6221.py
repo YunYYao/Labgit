@@ -29,6 +29,7 @@ class K6221():
         self.k6221=rm.open_resource(k6221_address)
     def A2182_connect(self):
         self.k6221.write('SOUR:DELT:NVPR')
+        
             
     def set_I_HIGH(self,I_HIGH=1e-3):
         self.k6221.write('SOUR:DELT:HIGH {}'.format(str(I_HIGH)))
@@ -99,6 +100,46 @@ class K6221():
                 data_last=DATA
                 print temperature
                 time.sleep(0.5)
+    
+    def wave_function(self, func='SIN',ferq=7, amp=0.005, offset=0, range='FIX'):
+        '''function{sine: SIN, 
+                    ramp:RAMP,
+                    square:SQU,
+                    arbitrary1:ARB1,
+                    };
+           frequency: [1e-3, 1e5] in Hz;
+           amplitude:[2e-9, 105] in mA, in Amps for SCPI;
+           offset: [-105 , 105] in mA.  in Amps for SCPI;
+           range:{   best: BEST,
+                      fixed: FIX
+                  };
+        '''
+        
+        self.k6221.write('SOUR:WAVE:FUNC {}'.format(str(func)))
+        self.k6221.write('SOUR:WAVE:FREQ '+str(freq))
+        self.k6221.write('SOUR:WAVE:AMPL '+str(amp/1000)
+        self.k6221.write('SOUR:WAVE:OFFS {}'.format(str(offset/1000))) 
+        self.k6221.write('SOUR:WAVE:RANG '+str(range)) 
+        
+        
+    def wave_frequency(self,freq=7):
+        '''   frequency: [1e-3, 1e5] in Hz    '''
+        self.k6221.write('SOUR:WAVE:FREQ '+str(freq))
+        
+
+    def wave_DCoffset(self,offset=1,ramp=0.002):
+        '''offset: [-105 , 105] in mA. but in Amps for SCPI
+           ramp: 
+        '''
+        self.k6221.write('SOUR:WAVE:OFFS {}'.format(str(offset/1000)))
+        
+    def wave_range(self, range='FIX'):
+        ''' range:{   best: BEST,
+                      fixed: FIX
+                  }
+        '''
+        self.k6221.write('SOUR:WAVE:RANG '+str(range))
+        
          
 '''
 meaurement below
