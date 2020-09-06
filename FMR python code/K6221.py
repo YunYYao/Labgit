@@ -101,48 +101,131 @@ class K6221():
                 print temperature
                 time.sleep(0.5)
     
-    def wave_function(self, func='SIN',ferq=7, amp=0.005, offset=0, range='FIX'):
-        '''function{sine: SIN, 
-                    ramp:RAMP,
-                    square:SQU,
-                    arbitrary1:ARB1,
-                    };
-           frequency: [1e-3, 1e5] in Hz;
-           amplitude:[2e-9, 105] in mA, in Amps for SCPI;
-           offset: [-105 , 105] in mA.  in Amps for SCPI;
-           range:{   best: BEST,
-                      fixed: FIX
-                  };
-        '''
-        
-        self.k6221.write('SOUR:WAVE:FUNC {}'.format(str(func)))
-        self.k6221.write('SOUR:WAVE:FREQ '+str(freq))
-        self.k6221.write('SOUR:WAVE:AMPL '+str(amp/1000)
-        self.k6221.write('SOUR:WAVE:OFFS {}'.format(str(offset/1000))) 
-        self.k6221.write('SOUR:WAVE:RANG '+str(range)) 
-        
-        
-    def wave_frequency(self,freq=7):
-        '''   frequency: [1e-3, 1e5] in Hz    '''
-        self.k6221.write('SOUR:WAVE:FREQ '+str(freq))
-        
-
-    def wave_DCoffset(self,offset=1,ramp=0.002):
-        '''offset: [-105 , 105] in mA. but in Amps for SCPI
+    def set_DCoffset(self,offset=-1e-3,ramp=2e-5):
+        '''offset: [-0.105 , 0.105] in A. but in Amps for SCPI
            ramp: 
         '''
-        self.k6221.write('SOUR:WAVE:OFFS {}'.format(str(offset/1000)))
+        dcoffset=self.read_DCoffset()
+        print('the start offset is '+str(dcoffset*1E3)+'mA')
+        delta_offset=offset - dcoffset
         
-    def wave_range(self, range='FIX'):
-        ''' range:{   best: BEST,
-                      fixed: FIX
-                  }
-        '''
-        self.k6221.write('SOUR:WAVE:RANG '+str(range))
+        while abs(delta_offset) != 0:
+            
+            if delta_offset < 0:
+                k=-1
+            if delta_offset == 0:
+                k=0
+            if delta_offset > 0:
+                k=1
+                
+            set_offset=dcoffset + k*min(abs(delta_offset),ramp)
+            self.k6221.write('SOUR:WAVE:OFFS '+str(set_offset))
+            
+            dcoffset=self.read_DCoffset()
+            delta_offset=offset - dcoffset
+            time.sleep(1)
+            
+        dcoffset=self.read_DCoffset()
         
+        print('Isd is '+str(dcoffset*1e3)+'mA')
+                   
+        
+    def read_DCoffset(self):
+        Isd=self.k6221.query('SOUR:WAVE:OFFS?')
+        '''unit in A'''
+        return float(Isd)
+        
+    def dvdi_text_init(self,pathfilename):
+        global COLUMNS
+    
+        COLUMNS='Isd(mA),dV(V),dR(Ω)\n'
+        print(COLUMNS)
+        if not os.path.exists(pathfilename):
+            f1=open(pathfilename,'a')        
+            f1.write(COLUMNS)
+            f1.close()
+            
+    def sweep_offset(self, pathfilename,Istart=-4e-3,Iend=4e-3,ramp=2e-5,dI=2e-5):
+        # ALL current in mA in set-up
+        global DATA
+        self.dvdi_text_init(pathfilename)
+        
+        sr830=SR830()
+        data_last=DATA
+        
+        self.set_DCoffset(Istart)
+        dcoffset=self.read_DCoffset()   # in mA
+        delta_offset=Iend - dcoffset
+        
+        while abs(delta_offset) != 0:
+            
+            if delta_offset < 0:
+                k=-1
+            if delta_offset == 0:
+                k=0
+            if delta_offset > 0:
+                k=1
+                
+            dV=sr830.GetVoltageAverage(n=10,amplifier=1.0).split(',')[0]
+            dR=float(dV)/float(dI)
+            DATA=str(dcoffset)+','+str(dV) +','+str(dR)+'\n'
+            if not DATA==data_last:
+                f1=open(pathfilename,'a')
+                f1.write(DATA)
+                f1.close()
+                data_last=DATA
+                print('Isd is '+str(dcoffset*1e3)+'mA')
+                time.sleep(0.5)   
+                
+            set_offset=dcoffset + k*min(abs(delta_offset),ramp)
+            self.k6221.write('SOUR:WAVE:OFFS '+str(set_offset))
+            
+            dcoffset=self.read_DCoffset()
+            delta_offset=Iend - dcoffset
+            time.sleep(1)
+
+
+        Istart=-Istart
+        Iend=-Iend
+        self.set_DCoffset(Istart)
+        dcoffset=self.read_DCoffset()   
+        delta_offset=Iend - dcoffset
+
+        while abs(delta_offset) != 0:
+            
+            if delta_offset < 0:
+                k=-1
+            if delta_offset == 0:
+                k=0
+            if delta_offset > 0:
+                k=1
+                
+            dV=sr830.GetVoltageAverage(n=10,amplifier=1.0).split(',')[0]
+            dR=float(dV)/float(dI)
+            DATA=str(dcoffset)+','+str(dV) +','+str(dR)+'\n'
+            if not DATA==data_last:
+                f1=open(pathfilename,'a')
+                f1.write(DATA)
+                f1.close()
+                data_last=DATA
+                print('Isd is '+str(dcoffset*1e3)+'mA')
+                time.sleep(0.5)   
+                
+            set_offset=dcoffset + k*min(abs(delta_offset),ramp)
+            self.k6221.write('SOUR:WAVE:OFFS '+str(set_offset))
+            
+            dcoffset=self.read_DCoffset()
+            delta_offset=Iend - dcoffset
+            time.sleep(1)
+        
+
+    
+
          
 '''
 meaurement below
+'''
+
 '''
 """ R-T meas via K6221+2182A delta mode """
 ppms=PPMS()
@@ -157,19 +240,61 @@ delta_count='INF'
 FilePath='E:\\YYY\\20190301\\YBCO-YIG\\3rd\\R-T\\#4'
 if not os.path.exists(FilePath):
     os.makedirs(FilePath)
-filename='S3-4 '+ str(init_T)+'k to '+str(set_T)+'k '+str(T_ramp)+'K-min '+'I='+str(I_resource)+' A'+'.txt'
-fp=os.path.join(FilePath,filename)
+    filename='S3-4 '+ str(init_T)+'k to '+str(set_T)+'k '+str(T_ramp)+'K-min '+'I='+str(I_resource)+' A'+'.txt'
+    fp=os.path.join(FilePath,filename)
 
-k6221.ARM_Delta(I_resource,delay=0.002,delta_count='INF')
-real_plot_another_process(plot_row_number=1,columns_list=[])
+    k6221.ARM_Delta(I_resource,delay=0.002,delta_count='INF')
+    real_plot_another_process(plot_row_number=1,columns_list=[])
 
-#k6221.R_T_text_init(fp)
-k6221.RUN_Delta(fp,set_T,T_ramp)
-
+    #k6221.R_T_text_init(fp)
+    k6221.RUN_Delta(fp,set_T,T_ramp)
+'''
        
      
     
+"""
+K6221-sin_wave-offset mode + SR830 to detect the dV - dI for Josephson coupling
+
+"""
+
+from sqm import *
+import numpy as np
+import matplotlib.pyplit as plt
+import os
+
+
+ppms=PPMS()
+vna=VNA()
+k6221=K6221()
+sr830=sr830()
+
+TempPoints=[300,10]
+FreqPoints=[]
+FieldPonits=[]
+
+"""set VNA"""
+vna.power_on_off('on')
+vna.fmr_init()
+vna.auto_scale()
+
+"""set K6221"""
+
+
+FilePath='E:\\YYY\\FGT\\NO_1\\damping'
+
+real_plot_another_process(plot_row_number=1,columns_list=[])
+
+i=0
+for freq in FreqPoints:
+    i=i+1
+    Temp=5  # in K
+    H=1000  # in Oe
+    filename=str(i)+'th '+str(Temp)+'K '+str(H)+'Oe '+str(freq/1e9)'GHz_S21.txt'
+    fp=os.path.join(FilePath,filename)
     
+    k6221.
+    
+
     
     
     

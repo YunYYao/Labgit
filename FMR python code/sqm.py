@@ -119,6 +119,11 @@ class K6221():
     
     def __init__(self,k6221_address='GPIB0::23::INSTR'):
         self.k6221=rm.open_resource(k6221_address)
+        
+
+        
+    """in DELTA mode below"""        
+        
     def A2182_connect(self):
         self.k6221.write('SOUR:DELT:NVPR')
             
@@ -169,7 +174,9 @@ class K6221():
             f1=open(pathfilename,'a')
             f1.write(COLUMNS)
             f1.close()
-           
+            
+    '''k62221 DELTA mode + k2182 nanovoltages to detect the differentical resistence'''    
+    
     def RUN_Delta(self,pathfilename,set_Temp,Temp_speed):
         global DATA
         self.R_T_text_init(pathfilename)
@@ -191,6 +198,149 @@ class K6221():
                 data_last=DATA
                 print temperature
                 time.sleep(0.5)
+                
+    """ in WAVE mode below """
+        
+    def wave_range(self, Range='BEST'):
+        ''' range:{   best: BEST,
+                      fixed: FIX
+                  }
+        '''
+        self.k6221.write('SOUR:WAVE:RANG '+str(Range))
+        
+    def Phasemarker(self,phase=0,state='on',line=1):
+        
+        self.k6221.write('SOUR:WAVE:PMAR '+str(phase))
+        self.k6221.write('SOUR:WAVE:STAT '+str(state))
+        self.k6221.write('SOUR:WAVE:OLIN '+str(line))
+        
+    def trig_on(self):
+       self.k6221.write('SOUR:WAVE:ARM')
+       self.k6221.write('SOUR:WAVE:INIT')
+         
+    def trig_off(self):
+        self.k6221.write('SOUR:WAVE:ABOR')
+     
+    def set_DCoffset(self,offset=-1e-3,ramp=2e-5):
+        '''offset: [-0.105 , 0.105] in A. but in Amps for SCPI
+           ramp: in A
+        '''
+        dcoffset=self.read_DCoffset()
+        print('the start offset is '+str(dcoffset*1E3)+'mA')
+        delta_offset=offset - dcoffset
+        
+        while abs(delta_offset) != 0:
+            
+            if delta_offset < 0:
+                k=-1
+            if delta_offset == 0:
+                k=0
+            if delta_offset > 0:
+                k=1
+                
+            set_offset=dcoffset + k*min(abs(delta_offset),ramp)
+            self.k6221.write('SOUR:WAVE:OFFS '+str(set_offset))
+            
+            dcoffset=self.read_DCoffset()
+            delta_offset=offset - dcoffset
+            time.sleep(1)
+            
+        dcoffset=self.read_DCoffset()
+        
+        print('Isd is '+str(dcoffset*1e3)+'mA')
+                   
+        
+    def read_DCoffset(self):
+        Isd=self.k6221.query('SOUR:WAVE:OFFS?')
+        '''unit in A'''
+        return float(Isd)
+        
+    def dvdi_text_init(self,pathfilename):
+        global COLUMNS
+    
+        COLUMNS='Isd(mA),dV(V),dR(Ω)\n'
+        print(COLUMNS)
+        if not os.path.exists(pathfilename):
+            f1=open(pathfilename,'a')        
+            f1.write(COLUMNS)
+            f1.close()
+            
+    def sweep_offset(self, pathfilename,Istart=-4e-3,Iend=4e-3,ramp=2e-5,dI=2e-5):
+        # ALL current in mA in set-up
+        global DATA
+        self.dvdi_text_init(pathfilename)
+        
+        sr830=SR830()
+        data_last=DATA
+        
+        self.set_DCoffset(Istart)
+        dcoffset=self.read_DCoffset()   # in mA
+        delta_offset=Iend - dcoffset
+        
+        while abs(delta_offset) != 0:
+            
+            if delta_offset < 0:
+                k=-1
+            if delta_offset == 0:
+                k=0
+            if delta_offset > 0:
+                k=1
+                
+            dV=sr830.GetVoltageAverage(n=10,amplifier=1.0).split(',')[0]
+            dR=float(dV)/float(dI)
+            DATA=str(dcoffset)+','+str(dV) +','+str(dR)+'\n'
+            if not DATA==data_last:
+                f1=open(pathfilename,'a')
+                f1.write(DATA)
+                f1.close()
+                data_last=DATA
+                print('Isd is '+str(dcoffset*1e3)+'mA')
+                time.sleep(0.5)   
+                
+            set_offset=dcoffset + k*min(abs(delta_offset),ramp)
+            self.k6221.write('SOUR:WAVE:OFFS '+str(set_offset))
+            
+            dcoffset=self.read_DCoffset()
+            delta_offset=Iend - dcoffset
+            time.sleep(1)
+
+
+        Istart=-Istart
+        Iend=-Iend
+        self.set_DCoffset(Istart)
+        dcoffset=self.read_DCoffset()   
+        delta_offset=Iend - dcoffset
+
+        while abs(delta_offset) != 0:
+            
+            if delta_offset < 0:
+                k=-1
+            if delta_offset == 0:
+                k=0
+            if delta_offset > 0:
+                k=1
+                
+            dV=sr830.GetVoltageAverage(n=10,amplifier=1.0).split(',')[0]
+            dR=float(dV)/float(dI)
+            DATA=str(dcoffset)+','+str(dV) +','+str(dR)+'\n'
+            if not DATA==data_last:
+                f1=open(pathfilename,'a')
+                f1.write(DATA)
+                f1.close()
+                data_last=DATA
+                print('Isd is '+str(dcoffset*1e3)+'mA')
+                time.sleep(0.5)   
+                
+            set_offset=dcoffset + k*min(abs(delta_offset),ramp)
+            self.k6221.write('SOUR:WAVE:OFFS '+str(set_offset))
+            
+            dcoffset=self.read_DCoffset()
+            delta_offset=Iend - dcoffset
+            time.sleep(1)
+
+    
+    
+    
                 
 class K2400():
     def __init__(self,k2400_address='GPIB0::16::INSTR'):
@@ -579,7 +729,9 @@ def SpinPumingSR830(filename,StartMag=1000,StopMag=0,Rate=2,amplifier=1,autophas
             f=open(filename,'a')                
             f.write(DATA)
             f.close()
-        
+    
+
+
 
 class Skype():
     def __init__(self):
